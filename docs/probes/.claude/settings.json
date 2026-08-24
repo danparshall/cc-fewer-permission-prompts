@@ -1,0 +1,27 @@
+{
+  "_comment": "Probe settings for investigating bounds of Claude Code permission matcher. Run with: claude --setting-sources project. Each rule maps to test case(s) in TEST_PLAN.md / TEST_PLAN_loop_reenable.md, so the matcher's allow/prompt verdict is unambiguous. NOTE: loop keywords (for/while/until) are DELIBERATELY absent from this allow-list — TEST_PLAN_loop_reenable.md needs to observe the matcher's NATIVE behavior on un-allow-listed loops (does it body-analyze like `until`?), which an explicit `Bash(for *)` rule would mask.",
+  "_additionalDirectories_note": "ADDED 2026-08-03; hypothesis CONFIRMED same day (FINDINGS 2026-08-03 completed run). Without this entry, --setting-sources project leaves cwd (probes/) as the session's ONLY trusted root, and any row touching /tmp PROMPTS regardless of verb-level allow-rule match (path scope preempts verb ALLOW — Family 2). With /tmp added, the same rows ALLOW: touch /tmp/probe_sanity flipped PROMPT→ALLOW with no other change. KEEP this entry — the /tmp-based probe rows depend on it. Discovery: SESSION_2026-08-03_probe_aborted.md §4.1; confirmation: FINDINGS 2026-08-03 (completed run) Phase B.",
+  "_deny_canary_note": "ADDED + CONFIRMED WORKING 2026-08-03 — Bash(rev *) in deny[] is a LOAD-CHECK CANARY, not a real policy. `rev .claude/settings.json` (cwd, read-only, harmless) auto-DENYING is unambiguous proof this file loaded: a deny can come from nowhere else. This matters because a PROMPT on a sanity row is otherwise ambiguous between 'settings never loaded' and 'path outside trusted roots' (that ambiguity misled the June 2026 sessions into two wrong conclusions). RETAINED as the standing first pre-flight row for every future probe — zero-cost, self-verifying. Do NOT use `rev` in any probe row for another purpose while this canary exists. Verified on CC 2.1.220: --setting-sources project DOES load cwd's .claude/settings.json.",
+  "permissions": {
+    "allow": [
+      "Bash(cd /tmp *)",
+      "Bash(cd /Users/dan/code *)",
+      "Bash(FOO=*)",
+      "Bash(PYTHONPATH=*)",
+      "Bash(if *)",
+      "Bash(python3 *)",
+      "Bash(mkdir *)",
+      "Bash(touch *)",
+      "Bash(ls *)",
+      "Bash(head *)",
+      "Bash(echo *)",
+      "Bash(git *)",
+      "Bash(diff *)",
+      "Bash(find *)",
+      "Bash(grep *)"
+    ],
+    "deny": ["Bash(rev *)"],
+    "ask": [],
+    "additionalDirectories": ["/tmp"]
+  }
+}
