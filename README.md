@@ -157,7 +157,7 @@ This is a **behavioral** caveat, not just provenance. `hooks/_blanket_verbs.py` 
 - A verb in the set that you **haven't** allowed → the hook lets the chain through, the matcher prompts anyway (a prompt leaks past the hook).
 - A verb you allow that **isn't** in the set → the hook denies a chain your matcher would have accepted (extra friction, no prompt).
 
-Neither is dangerous — the hook never *grants* anything — but the point of the hook is accuracy at that boundary. **Edit `BLANKET_VERBS` to match your own allow rules**: one entry per verb that has a blanket `Bash(<verb> *)` rule, plus the matcher's built-in always-allowed verbs (`date`, `hostname` as far as we've observed). The file says "do not edit by hand" because upstream it's codegen'd; in your copy, hand-editing is exactly right.
+Neither is dangerous — the hook never *grants* anything — but the point of the hook is accuracy at that boundary. **Edit `BLANKET_VERBS` to match your own allow rules**: one entry per verb that has a blanket `Bash(<verb> *)` rule, plus the matcher's built-in always-allowed verbs (`date`, `hostname` as far as we've observed). Upstream the file is regenerated from the author's allow-list on every install; in your copy there is no generator, and the module docstring says the same.
 
 ## How the corpus is maintained
 
