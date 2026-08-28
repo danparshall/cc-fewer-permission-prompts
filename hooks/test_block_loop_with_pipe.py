@@ -47,8 +47,9 @@ into single-only (for `$var`) and both (for pipe/loop/do).
 import json
 import subprocess
 import sys
+from pathlib import Path
 
-HOOK = "/Users/dan/code/dotfiles/claude-hooks/block_loop_with_pipe.py"
+HOOK = Path(__file__).parent / "block_loop_with_pipe.py"
 
 # Each case: (command, should_block, description)
 CASES = [

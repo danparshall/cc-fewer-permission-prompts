@@ -38,8 +38,9 @@ route from the hook.
 import json
 import subprocess
 import sys
+from pathlib import Path
 
-HOOK = "/Users/dan/code/dotfiles/claude-hooks/block_absolute_path_py_verb.py"
+HOOK = Path(__file__).parent / "block_absolute_path_py_verb.py"
 
 # Each case: (command, should_block, description)
 CASES = [

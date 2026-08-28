@@ -27,8 +27,9 @@ Coverage rationale:
 import json
 import subprocess
 import sys
+from pathlib import Path
 
-HOOK = "/Users/dan/code/dotfiles/claude-hooks/block_brace_expansion.py"
+HOOK = Path(__file__).parent / "block_brace_expansion.py"
 
 # Each case: (command, should_block, description)
 CASES = [

@@ -72,16 +72,18 @@ def _build_cd_code_re() -> "re.Pattern[str]":
     """Compile CD_CODE_RE from $HOME + CC_HOOK_CD_ALLOWED_PREFIXES.
 
     Precedence:
-      1. If `CC_HOOK_CD_ALLOWED_PREFIXES` is a non-empty colon-separated
-         string, its entries are the sole prefixes (auto-detect is off).
-      2. Otherwise: `$HOME/{code,work,src,dev,projects}` (fallback HOME
-         is `/Users/dan` if unset).
+      1. If `CC_HOOK_CD_ALLOWED_PREFIXES` parses to one or more non-empty
+         colon-separated entries, those are the sole prefixes (auto-detect
+         is off). Trailing slashes are stripped so `/opt/work/` matches
+         `/opt/work` and its subpaths.
+      2. Otherwise (unset, empty, or all separators): `$HOME/{code,work,
+         src,dev,projects}`, with HOME falling back to the running user's
+         home directory if unset.
     """
     override = os.environ.get("CC_HOOK_CD_ALLOWED_PREFIXES", "")
-    if override:
-        prefixes = [p for p in override.split(":") if p]
-    else:
-        home = os.environ.get("HOME") or "/Users/dan"
+    prefixes = [p.rstrip("/") for p in override.split(":") if p.rstrip("/")]
+    if not prefixes:
+        home = os.environ.get("HOME") or os.path.expanduser("~")
         prefixes = [f"{home}/{sub}" for sub in _DEFAULT_CD_CODE_SUBDIRS]
     alternation = "|".join(re.escape(p) for p in prefixes)
     return re.compile(rf'^\s*cd\s+(?:{alternation})(?:/\S*)?\s')

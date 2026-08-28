@@ -9,11 +9,12 @@ entry dated 2026-06-01) and does not fire on benign quoted bodies.
 import json
 import subprocess
 import sys
+from pathlib import Path
 
-HOOK = "/Users/dan/code/dotfiles/claude-hooks/block_newline_hash_in_quoted_arg.py"
+HOOK = Path(__file__).parent / "block_newline_hash_in_quoted_arg.py"
 
 # Each case: (command, should_block, description)
-cases = [
+CASES = [
     # POSITIVE: empirically confirmed Probe B from the 2026-06-01 session.
     (
         'python3 -c "print(\'a\')\n# comment"',
@@ -75,24 +76,46 @@ cases = [
     ),
 ]
 
-failures = 0
-for cmd, should_block, desc in cases:
+
+def _blocked(cmd: str) -> bool:
     payload = json.dumps({"tool_name": "Bash", "tool_input": {"command": cmd}})
-    r = subprocess.run(
-        [HOOK], input=payload, capture_output=True, text=True,
+    r = subprocess.run([HOOK], input=payload, capture_output=True, text=True)
+    return "permissionDecision" in r.stdout and '"deny"' in r.stdout
+
+
+def _non_bash_passthrough() -> bool:
+    payload = json.dumps(
+        {"tool_name": "Edit", "tool_input": {"command": 'x = "a\n# b"'}}
     )
-    blocked = "permissionDecision" in r.stdout and '"deny"' in r.stdout
-    status = "PASS" if blocked == should_block else "FAIL"
-    if blocked != should_block:
+    r = subprocess.run([HOOK], input=payload, capture_output=True, text=True)
+    return '"deny"' not in r.stdout
+
+
+def test_hook_behavior():
+    """Pytest entry point: every case must match its expected block decision."""
+    for cmd, should_block, desc in CASES:
+        assert _blocked(cmd) == should_block, (
+            f"{desc!r}: expected block={should_block}, got block={_blocked(cmd)}"
+        )
+    assert _non_bash_passthrough(), "Non-Bash tool payload must pass through (no deny)"
+
+
+def _main() -> int:
+    failures = 0
+    for cmd, should_block, desc in CASES:
+        blocked = _blocked(cmd)
+        status = "PASS" if blocked == should_block else "FAIL"
+        if blocked != should_block:
+            failures += 1
+        print(f"{status}  blocked={blocked!s:5}  expected={should_block!s:5}  {desc}")
+
+    passthrough_ok = _non_bash_passthrough()
+    print(f"{'PASS' if passthrough_ok else 'FAIL'}  Non-Bash tool passthrough")
+    if not passthrough_ok:
         failures += 1
-    print(f"{status}  blocked={blocked!s:5}  expected={should_block!s:5}  {desc}")
 
-# Also confirm non-Bash tools are passthrough.
-payload = json.dumps({"tool_name": "Edit", "tool_input": {"command": 'x = "a\n# b"'}})
-r = subprocess.run([HOOK], input=payload, capture_output=True, text=True)
-passthrough_ok = '"deny"' not in r.stdout
-print(f"{'PASS' if passthrough_ok else 'FAIL'}  Non-Bash tool passthrough")
-if not passthrough_ok:
-    failures += 1
+    return 1 if failures else 0
 
-sys.exit(1 if failures else 0)
+
+if __name__ == "__main__":
+    sys.exit(_main())

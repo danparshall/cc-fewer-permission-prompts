@@ -484,16 +484,20 @@ class TestBuildCdCodeRe(unittest.TestCase):
         self.assertIsNotNone(regex.match("cd /opt/work "))
         self.assertIsNotNone(regex.match("cd /opt/work/project "))
 
-    def test_home_unset_falls_back_to_default(self):
-        # If HOME is somehow missing from env, the default /Users/dan is used
-        # (chosen so Dan's real setup keeps working even in weird env states).
+    def test_home_unset_falls_back_to_current_users_home(self):
+        # If HOME is somehow missing from env, fall back to the running
+        # user's home directory (from the passwd database) — not a
+        # hardcoded path. On Dan's machines that's /Users/dan; on a CI
+        # runner it's whatever the runner's user is.
         saved = os.environ.copy()
         try:
             os.environ.pop("HOME", None)
             os.environ.pop("CC_HOOK_CD_ALLOWED_PREFIXES", None)
             from block_bash_chains import _build_cd_code_re
             regex = _build_cd_code_re()
-            self.assertIsNotNone(regex.match("cd /Users/dan/code "))
+            real_home = os.path.expanduser("~")
+            self.assertIsNotNone(regex.match(f"cd {real_home}/code "))
+            self.assertIsNone(regex.match("cd /nonexistent-home/code "))
         finally:
             os.environ.clear()
             os.environ.update(saved)
@@ -502,6 +506,22 @@ class TestBuildCdCodeRe(unittest.TestCase):
         # Empty string override = treat as unset (defensive).
         regex = self._regex_for(home="/home/alice", override="")
         self.assertIsNotNone(regex.match("cd /home/alice/code "))
+
+    def test_all_separator_override_falls_back_to_auto_detect(self):
+        # An override that parses to zero prefixes (e.g. ":" or "::") must
+        # NOT compile to an empty alternation that matches `cd /anything`.
+        # Treat it like unset: auto-detect applies.
+        regex = self._regex_for(home="/home/alice", override="::")
+        self.assertIsNotNone(regex.match("cd /home/alice/code "))
+        self.assertIsNone(regex.match("cd /etc "))
+
+    def test_override_with_trailing_slash_matches_subpaths(self):
+        # `/opt/work/` should behave like `/opt/work`: match the prefix
+        # itself and any subpath, not just the literal trailing-slash form.
+        regex = self._regex_for(home="/home/alice", override="/opt/work/")
+        self.assertIsNotNone(regex.match("cd /opt/work "))
+        self.assertIsNotNone(regex.match("cd /opt/work/project "))
+        self.assertIsNotNone(regex.match("cd /opt/work/ "))
 
 
 class TestCdCodePathRuntimeWiring(unittest.TestCase):

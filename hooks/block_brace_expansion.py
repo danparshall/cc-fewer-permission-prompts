@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""PreToolUse hook: hard-fail Bash commands containing a bash brace
+r"""PreToolUse hook: hard-fail Bash commands containing a bash brace
 expansion (`{a,b}`, `{1,2,3}`, `{1..5}`, etc.) in shell-argument position.
 
 Background: Claude Code's permission matcher parses commands with a real

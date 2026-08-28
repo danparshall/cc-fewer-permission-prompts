@@ -30,11 +30,9 @@ DENY case to keep coverage of the open-line space.
 import json
 import subprocess
 import sys
+from pathlib import Path
 
-HOOK = (
-    "/Users/dan/code/dotfiles/claude-hooks/"
-    "block_heredoc_with_pipe_or_redirect.py"
-)
+HOOK = Path(__file__).parent / "block_heredoc_with_pipe_or_redirect.py"
 
 # Each case: (command, should_block, description)
 CASES = [
