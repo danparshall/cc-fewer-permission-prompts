@@ -1,5 +1,7 @@
 # cc-fewer-permission-prompts
 
+[![tests](https://github.com/danparshall/cc-fewer-permission-prompts/actions/workflows/tests.yml/badge.svg)](https://github.com/danparshall/cc-fewer-permission-prompts/actions/workflows/tests.yml)
+
 **Verified against Claude Code 2.1.220** (2026-08-03 drift check, 8/8 rows unchanged — [`docs/FINDINGS.md`](docs/FINDINGS.md), newest entry on top). Matcher behavior drifts on version bumps; see [When to distrust this](#when-to-distrust-this).
 
 Fewer Claude Code permission prompts **without** `--dangerously-skip-permissions`.
