@@ -56,7 +56,7 @@ This is a long-running line. It doesn't get "completed" the way a feature does. 
 
 ## Portability — reusing this corpus outside this repo
 
-This folder is being prepared for a standalone open-source spinoff. What travels and what doesn't:
+This folder is published as the standalone open-source repo [`danparshall/cc-fewer-permission-prompts`](https://github.com/danparshall/cc-fewer-permission-prompts) (MIT, first publish 2026-08-28). `publish_public_repo.py` exports it — together with the curated `claude-hooks/`, six `notes/*.md` snapshots, and the curator agent — on every `update_claude_permissions.py` run from the machine holding the publisher flag; the public repo's landing README is hand-authored there. See `notes/corpus_spinoff_publisher.md`. What travels and what doesn't:
 
 **Portable as-is:**
 - The thesis and strategy framework (this README, `STRATEGIES.md`) — nothing in them is user-specific beyond the examples.
@@ -67,7 +67,7 @@ This folder is being prepared for a standalone open-source spinoff. What travels
 **Not portable (this-repo-specific) — needs parameterization or replacement in a spinoff:**
 - The shipped hooks (`claude-hooks/block_*.py`) and their installer (`update_claude_permissions.py`, `install.sh`) are shaped to one user's allow-list and multi-session workflow. In a spinoff they're *reference implementations* of Strategy 2, not drop-ins: the blanket-verb list, DENY inventory, and nastygram texts all encode local policy.
 - `MATCHER_LAST_VERIFIED` / the staleness nag lives in the installer — a spinoff wants an equivalent freshness marker, wherever its install path is.
-- The curator agent (`.claude/agents/chain-matcher-curator.md`) references this repo's paths.
+- The curator agent (`.claude/agents/chain-matcher-curator.md`) references this repo's paths; the publisher rewrites them to the public layout at export time.
 - Absolute paths (`/Users/dan/...`) and machine names (`Dans-MacBook-Pro`, etc.) in historical entries are reproduction context, not requirements — read them as "the operator's home dir / machine."
 
 **New-user/agent quickstart:** read this README's thesis → `STRATEGIES.md` → `METHODOLOGY.md`. To find out what *your* CC version's matcher does: `cd probes/ && claude --setting-sources project`, run the Phase-A pre-flight (deny-canary first — do not collect data until it proves your settings loaded), then the min-viable rows from the latest `REPROBE_*.md`. Compare against the newest FINDINGS entry; deviations are findings.
