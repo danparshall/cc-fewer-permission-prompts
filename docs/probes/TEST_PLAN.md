@@ -11,6 +11,8 @@ claude --setting-sources project
 
 `--setting-sources project` loads ONLY this directory's `settings.json` — skips your user-level hooks (so `block_bash_chains.py` doesn't interfere) and skips your user-level allow rules (so only the rules listed here are active). Auth (OAuth/keychain) is unaffected.
 
+**Permission mode (mandatory as of 2026-09-02):** the probe session must be in **default mode** for every matcher row — CC ≥2.1.258 starts sessions in auto mode, whose classifier silently ALLOWs all prompt families and masks every matcher verdict (FINDINGS 2026-09-02). Switch with shift+tab and confirm the indicator before row 1.
+
 For each test row below:
 
 1. Paste the **User message** into the probe Claude.

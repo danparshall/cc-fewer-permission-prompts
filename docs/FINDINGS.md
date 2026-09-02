@@ -12,6 +12,53 @@ Each entry should include:
 
 ---
 
+## 2026-09-02 — #79 re-probe on CC 2.1.258: NO static-matcher drift (8/8 default mode, reason-text verbatim); NEW auto-mode classifier layer preempts ALL prompt families when active
+
+**Status:** Scheduled re-probe (dotfiles #79; corpus last verified on CC 2.1.220). Two-condition result: in **auto mode**, every expected-PROMPT row ran silently (6/6 deviations, plus harness row A3); after switching the probe session to **default mode** (shift+tab), all 8 min-viable rows matched the June-era model exactly, including verbatim reason-text. `MATCHER_LAST_VERIFIED` bumped to 2026-09-02. Every shipped hook retains its empirical justification **in default permission mode**; in auto mode the hooks are strictly additive friction (see Impact).
+
+**Methodology:** Mode B HITL per METHODOLOGY.md. `claude --setting-sources project` from `probes/`, CC **2.1.258** both sides; coordinating session Fable 5. First probe launch discarded (conda env active in the shell — the 08-03 confound); relaunched clean. Runsheet v3 (chat-only, derived from REPROBE_2026-08-03's v2): deny-canary Phase A, then the min-viable 8. Deny-everything convention. Deviation-triggered `dangerouslyDisableSandbox: true` attribution re-runs were planned but superseded — tool results self-attributed via a new "Allowed by auto mode classifier" result line. The probe session **started in auto mode** despite loading zero user-level settings (canary-proven).
+
+**Results — Phase A (harness):**
+
+| # | Command | 2.1.220 baseline | auto mode | default mode |
+|---|---|---|---|---|
+| A1 | `rev .claude/settings.json` | DENY | **DENY** — load-proof canary holds on 2.1.258 | — |
+| A2 | `touch ./loadcheck_listed` | ALLOW | ALLOW | — |
+| A3 | `cp ./loadcheck_listed ./loadcheck_cp` | PROMPT (plain) | **ALLOW** ⚠️ | **PROMPT** (plain) |
+
+**Results — min-viable 8 (numbering per TEST_PLAN):**
+
+| Row | Command | 2.1.220 expected | auto mode | default mode | default-mode reason-text (verbatim) |
+|---|---|---|---|---|---|
+| 1 | `touch /tmp/probe_sanity` | ALLOW | ALLOW | ALLOW | — |
+| 3 | `mkdir -p /tmp/probe3 && touch /tmp/probe3/x` | ALLOW | ALLOW | ALLOW | — |
+| 4 | `mkdir -p /tmp/probe4 && unknownmarker_test4` | PROMPT | **ALLOW** ⚠️ (ran to shell exit 127) | PROMPT | "This command requires approval" (new plain-prompt wording) |
+| 14 | `python3 <<'PY' 2>&1` … (redirect on open line) | PROMPT | **ALLOW** ⚠️ ("Allowed by auto mode classifier") | PROMPT | "Contains shell syntax (file_redirect) that cannot be statically analyzed" |
+| 16 | `ls /tmp/{a,b}` | PROMPT | **ALLOW** ⚠️ | PROMPT | "Brace expansion" |
+| 17 | `diff <(echo a) <(echo b)` | PROMPT | **ALLOW** ⚠️ ("Allowed by auto mode classifier") | PROMPT | "Contains process_substitution" |
+| 20 | `find /Users/dan -maxdepth 1 -name .bashrc` | PROMPT | **ALLOW** ⚠️ (a READ outside trusted roots) | PROMPT | none (plain) |
+| 21 | `/tmp/x.py` | PROMPT | **ALLOW** ⚠️ (ran to shell exit 126) | PROMPT | "This command requires approval" |
+
+### Finding A — auto mode's classifier preempts the static matcher wholesale
+
+Every family sampled — per-segment chains (row 4), Family-3 static-analysis bails (14/16/17), Family-2 path scope (20), allow-rule gaps (21, A3) — runs silently in auto mode, explicitly attributed by the "Allowed by auto mode classifier" tool-result line. This is **not matcher drift**: the same binary, same settings file, same session produces the full June-era behavior once the permission mode is switched to default. A semantic classifier does not need to statically analyze a command, so the tree-sitter bail family is definitionally preempted, not fixed. Rows 4 and 21 executed through to genuine shell errors (127 / 126), confirming the commands really run rather than being rewritten or absorbed.
+
+### Finding B — static matcher unchanged on 2.1.258 (default mode): 8/8, reason-text byte-identical
+
+All three captured reason-texts match the 2.1.220 record verbatim. New cosmetic specimens only: default-mode prompts now carry an upsell line — "Tip: auto mode handles these prompts for you — choose 'switch to auto mode' below" — and the plain prompts (4/21) display "This command requires approval" where the baseline recorded no reason line. No verdict changed. `MATCHER_LAST_VERIFIED` → 2026-09-02.
+
+### Finding C — auto mode appears to be the out-of-box state
+
+The probe session loaded ONLY `probes/.claude/settings.json` (canary-proven) yet started in auto mode, suggesting auto is the 2.1.258 default (sticky per-project CLI state outside settings.json is not ruled out). The coordinating dotfiles session (full user config) also runs in auto mode.
+
+**Impact on the hooks:** Nothing retires on drift grounds — in default mode every hook's empirical justification stands. But the value calculus changed: in an auto-mode session the classifier already produces zero prompts for these shapes, so every deny hook is pure added friction (observed live: `block_bash_chains.py` denied a `wc`/`cat` chain in the coordinating session that the classifier would have allowed). Hook value is now confined to default-mode sessions. Strategic reassessment is a Dan-level decision, out of scope for this entry: whether to gate/retire hooks locally, and how the public repo's README should reposition.
+
+**Protocol change for future probes:** record the probe session's permission mode alongside `claude --version`, and run all matcher rows in **default mode** — the classifier otherwise masks every matcher verdict. Auto-mode sweeps are a separate, second condition worth capturing when investigating the classifier itself.
+
+**Confidence:** High for the sampled rows (both conditions observed in one session, deviations self-attributed). Medium for the full model: the min-viable 8 covers one row per family; Family-1 (brace-quote heuristic, row 18) is unsampled in both this and the 08-03 run; the classifier's own deny/limits behavior is entirely unexplored.
+
+---
+
 ## 2026-08-03 (later) — 30-day drift check COMPLETE: 8/8 rows match, NO drift on CC 2.1.220. Path-scope hypothesis CONFIRMED. Load-proof canary technique added. June "project = git root" conclusion refuted.
 
 **Status:** The full min-viable pass ran to completion on the second attempt, same day as the aborted run below. **All 8 rows match the June-era / 2026-07-28 model — no matcher drift.** `MATCHER_LAST_VERIFIED` bumped to 2026-08-03; snooze cleared to `None`. Every shipped hook retains its empirical justification on CC 2.1.220.
