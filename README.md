@@ -2,7 +2,9 @@
 
 [![tests](https://github.com/danparshall/cc-fewer-permission-prompts/actions/workflows/tests.yml/badge.svg)](https://github.com/danparshall/cc-fewer-permission-prompts/actions/workflows/tests.yml)
 
-**Verified against Claude Code 2.1.220** (2026-08-03 drift check, 8/8 rows unchanged — [`docs/FINDINGS.md`](docs/FINDINGS.md), newest entry on top). Matcher behavior drifts on version bumps; see [When to distrust this](#when-to-distrust-this).
+**Verified against Claude Code 2.1.258** (2026-09-02 drift check, 8/8 rows unchanged in default permission mode — [`docs/FINDINGS.md`](docs/FINDINGS.md), newest entry on top). Matcher behavior drifts on version bumps; see [When to distrust this](#when-to-distrust-this).
+
+> **Auto mode changes the picture (CC ≈2.1.258+).** Recent Claude Code starts sessions in *auto mode*, where a classifier approves most command shapes without prompting — including every shape these hooks target. In an auto-mode session these hooks won't save you prompts; they add hard DENYs the classifier would have allowed. They chiefly matter if you run default mode, pin an older CC, or your org disables auto mode. The underlying static matcher is unchanged as of 2.1.258 — just preempted while the classifier is active.
 
 Fewer Claude Code permission prompts **without** `--dangerously-skip-permissions`.
 
