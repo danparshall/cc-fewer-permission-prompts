@@ -116,6 +116,10 @@ Issue #19 tracks whether the self-heal fully closes this gap.
 - Sibling notes: `cd_git_hardcoded.md`, `bash_loop_permissions.md` —
   same shape (debug a quiet config-layer failure, document, leave a
   tripwire for future-me).
+- `nori_block_local_composer.md` — the same self-heal shape for the
+  NORI-AI managed block: `sync_nori_block.py` runs from `install.sh`,
+  restoring the block after any `sks switch`. Fixes the twin of this
+  issue on the CLAUDE.md side.
 
 ## Update 2026-08-03 — claude-exit retired; per-machine disable procedure
 
