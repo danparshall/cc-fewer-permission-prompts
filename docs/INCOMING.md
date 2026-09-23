@@ -21,6 +21,42 @@ Format for each entry:
 
 ## Pending
 
+### 2026-09-22 — `block_bash_chains.py` FALSE POSITIVE (DENY) on an all-`git` chain: an apostrophe in the double-quoted `-m` message corrupts `strip_inert`'s quote handling, leaking a quoted `;` into the chain split → phantom `#93` segment
+
+**Command:**
+```
+git -C /Users/dan/code/dotfiles add STATUS.md docs/active/nori-registry-hygiene/ && git -C /Users/dan/code/dotfiles -c user.name="Dan (air, dotfiles, 20260922T0112)" -c user.email="parshall.dan@gmail.com" commit -q -m "convo: 20260922_triage_close_93_sweep_94 — triage snapshot; #93 won't-do, #94 sweep logged" && git -C /Users/dan/code/dotfiles log -1 --format='%h %an %s'
+```
+(First attempt additionally had a `| tail -1` tail — a legitimately non-blanket pipe segment. The retry above dropped the pipe and was **still DENIED**, which isolates the quoted content, not the pipe, as the cause.)
+
+**Context:** Session `Dan (air, dotfiles, 20260922T0112)` on `Dans-MacBook-Air`, 2026-09-22 ~01:40 UTC, standard `~/.claude/settings.json` (all Dan-authored hooks live). Committing a triage convo on the `nori-registry-hygiene` work-line. `block_bash_chains.py` hard-failed the command twice with its standard nastygram. Workaround Dan used: dropped the semicolon from the commit message and ran the `git add` / `git commit` calls as separate Bash tool calls.
+
+**Segments + rules I think should match:** Three real segments, all leading verb `git` (blanket, in `_blanket_verbs.py`): `git … add …` && `git … commit …` && `git … log …`. Every real segment is blanket → the chain SHOULD pass silently under the FINDINGS 2026-06-04 all-blanket-chain model. Nothing here should prompt *or* block.
+
+**Hypothesis (verified by reading + running `strip_inert`'s logic against this exact string — hook NOT modified):** Hook-side false positive, a two-part failure in `strip_inert()`:
+
+1. `strip_inert` runs its **single-quote** substitution (`re.sub(r"'[^']*'", "''", cmd)`) *before* its double-quote substitution. The apostrophe in `won't-do` — which is *inside* the double-quoted `-m` message — is misread as an **opening** single-quote. `[^']*` then runs forward to the next literal single-quote in `--format='%h %an %s'`, blanking the entire span between them. That span includes the message's **closing `"`**, the **second `&&`**, and the format string's **opening `'`**.
+2. Because the message's closing `"` was consumed, the later double-quote pass can no longer neutralize the message string. So the `;` in `… snapshot; #93 …` **survives** into the stripped command as a live chain separator.
+
+Splitting the corrupted-stripped string on `&&|\|\||;` yields a phantom third segment ` #93 won''%h %an %s'`. `LEADING_VERB_RE` (`^\s*([a-zA-Z]…)`) fails to match it (leading char `#` isn't a letter) → treated as non-blanket → `emit_block()` → DENY.
+
+**Isolation (ran the splitter on three variants):**
+- As-typed (apostrophe + `;`): segments `['git', 'git', <phantom '#93…' → None>]` → **BLOCK**. Matches the observed deny.
+- Apostrophe removed (`wont-do`): stripped is clean, segments `['git','git','git']` → **pass**.
+- Semicolon removed from message (apostrophe kept): segments `['git','git']` → **pass**.
+
+So the apostrophe and the quoted `;` are **jointly necessary**. Dan's "quoted-semicolon is the cause" read is correct in spirit but incomplete: the `;` alone is harmless (it lives inside a properly-neutralized double-quoted span). It only leaks because the **apostrophe first corrupts the single-quote pass** and eats the message's closing quote. The em dash is incidental — non-ASCII text, survives `strip_inert` untouched, plays no role. This is the classic naive-quote-stripper failure the `strip_inert` docstring warns about ("doesn't handle … nested substitutions") generalized to apostrophes-inside-double-quotes.
+
+**Impact:**
+- **Hook side:** genuine `block_bash_chains.py` false positive. `strip_inert`'s sequential quote passes don't model shell quote nesting — a single-quote (apostrophe) inside a double-quoted region is not shell-special, but the regex treats it as a quote delimiter. Any allowed chain whose double-quoted argument contains BOTH an apostrophe AND a shell metachar (`;`/`&&`/`||`) after that apostrophe is at risk. Commit messages are the obvious hot zone (English contractions + our convo-label convention that uses `;` and `#NN` issue refs — note this very work-line's triage labels are apostrophe-and-semicolon-rich, so this FP class will recur when committing curator docs, mirroring the 2026-08-03 `block_heredoc_with_pipe_or_redirect` self-hit).
+- **Matcher side:** never consulted — the hook fired first. Whether Claude Code's real matcher would have allowed this (it should — all-blanket per-segment) is untested but almost certainly yes; the matcher does proper quote lexing (FINDINGS 2026-08-03 Finding D).
+- **Workaround that needs no hook change:** what Dan did — drop the `;` from the message, or split into separate `git add` / `git commit` Bash calls (cwd persists). Also effective: avoid apostrophes in commit-message bodies, or phrase the label without a semicolon.
+- **Strategy note (deferred — NOT proposing a hook change here):** a Strategy-2 refinement would make `strip_inert` quote-context-aware (single pass, left-to-right, honoring whichever quote opened first — the standard shell-quote-state machine), so an apostrophe inside a double-quoted span is inert and vice-versa. `block_loop_with_pipe.py` already has a two-level quote-strip precedent worth cribbing. Frequency conjunct of the deny-hook gate is n=1 so far, but the recurrence risk is structural (commit messages), so this is a stronger Strategy-2 candidate than most FP entries. Hook redesign stays out of curator scope.
+
+**Classification:** **hook-side false positive** (`block_bash_chains.py` `strip_inert` quote-nesting flaw). NOT a matcher weirdo, NOT an allow-rule gap. The command is legitimately all-blanket and should have run.
+
+---
+
 ### 2026-08-16 — env-prefixed `claude -p "…" --model haiku --debug > out 2> err` prompted — probable plain rule-miss (no allow rule for the `claude` verb); env-var prefix + long quoted prompt-arg as secondary candidates (Strategy 0 at n=1)
 
 **Command:**
