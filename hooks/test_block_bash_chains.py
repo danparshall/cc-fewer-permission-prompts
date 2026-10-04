@@ -297,6 +297,122 @@ class TestQuotedChainOpsNotSplit(unittest.TestCase):
         )
 
 
+class TestQuoteStateTracking(unittest.TestCase):
+    """Chain operators inside a quoted span are inert, whatever OTHER quote
+    characters that span contains. Shell quoting is a state machine: inside
+    "...", an apostrophe is literal; inside '...', a double quote is literal;
+    inside "...", \\" does not close the span.
+
+    Regression origin: INCOMING.md 2026-07-24, 2026-09-22, 2026-10-04 —
+    git commit messages with `;` and English contractions were DENIED as
+    phantom chains because quote spans were blanked by independent
+    single-then-double regex passes, so an apostrophe inside a double-quoted
+    message paired with a later single-quoted argument and ate the
+    message's closing quote."""
+
+    # --- Apostrophe-free baselines (pins). ---
+
+    def test_semicolon_in_double_quoted_message(self):
+        self.assertEqual(run_hook('git commit -m "a; b"'), "allow")
+
+    def test_ampersands_in_double_quoted_message(self):
+        self.assertEqual(run_hook('git commit -m "a && b"'), "allow")
+
+    # --- Apostrophes inside double quotes. ---
+
+    def test_semicolon_and_apostrophe_then_single_quoted_arg(self):
+        self.assertEqual(
+            run_hook(
+                "git commit -m \"snapshot; won't-do\" && "
+                "git log -1 --format='%h %s'"
+            ),
+            "allow",
+        )
+
+    def test_ampersands_and_apostrophe_then_single_quoted_arg(self):
+        self.assertEqual(
+            run_hook(
+                "git commit -m \"a && can't\" && git log --format='%h'"
+            ),
+            "allow",
+        )
+
+    def test_incoming_2026_09_22_exact_command(self):
+        self.assertEqual(
+            run_hook(
+                'git -C /Users/dan/code/dotfiles add STATUS.md '
+                'docs/active/nori-registry-hygiene/ && '
+                'git -C /Users/dan/code/dotfiles '
+                '-c user.name="Dan (air, dotfiles, 20260922T0112)" '
+                '-c user.email="parshall.dan@gmail.com" commit -q -m '
+                '"convo: 20260922_triage_close_93_sweep_94 — triage '
+                "snapshot; #93 won't-do, #94 sweep logged\" && "
+                'git -C /Users/dan/code/dotfiles log -1 '
+                "--format='%h %an %s'"
+            ),
+            "allow",
+        )
+
+    def test_multiline_message_with_quoted_phrases_and_contractions(self):
+        # 2026-07-24 shape: multi-line -m body mixing paired 'phrases',
+        # contractions, and `;`, followed by a single-quoted argument.
+        self.assertEqual(
+            run_hook(
+                "git commit -am \"Apply fixes\n\n"
+                "- 'last week' -> 'two days ago'; it's (x3)\n"
+                "- don't touch voice; see results\" "
+                "--author='A B <a@b.c>'"
+            ),
+            "allow",
+        )
+
+    def test_codename_template_with_apostrophe_message(self):
+        # The per-commit identity template from CLAUDE.md: nested "..."
+        # inside $(...) inside "...".
+        self.assertEqual(
+            run_hook(
+                'git -c user.name="Dan (air, $(basename "$(dirname '
+                '"$(git rev-parse --path-format=absolute --git-common-dir)'
+                '")"), 20261004T1751, opus-5.5)" '
+                '-c user.email="parshall.dan@gmail.com" '
+                "commit -m \"fix; it's done\" && git log -1 --format='%h'"
+            ),
+            "allow",
+        )
+
+    # --- Escaped double quote inside double quotes. ---
+
+    def test_escaped_double_quote_inside_double_quotes(self):
+        self.assertEqual(
+            run_hook('echo "she said \\"x; y\\" ok"'), "allow"
+        )
+
+    # --- Real chains must still be seen. ---
+
+    def test_real_chain_after_double_quoted_apostrophe(self):
+        self.assertEqual(
+            run_hook("echo \"it's\" && unknownmarker"), "block"
+        )
+
+    def test_real_chain_after_single_quoted_double_quote(self):
+        self.assertEqual(
+            run_hook("echo 'say \"hi' && unknownmarker"), "block"
+        )
+
+    def test_unterminated_quote_does_not_hide_chain(self):
+        # Bash would reject this, but the hook must not treat the
+        # unmatched apostrophe as hiding everything after it.
+        self.assertEqual(
+            run_hook("echo it's; unknownmarker"), "block"
+        )
+
+    def test_escaped_semicolon_outside_quotes_is_not_a_chain(self):
+        # `\;` is a literal argument character (e.g. find -exec … \;).
+        self.assertEqual(
+            run_hook("echo a\\; unknownmarker"), "allow"
+        )
+
+
 class TestAllowedCommands(unittest.TestCase):
     """Non-chains and genuine exceptions must pass through."""
 

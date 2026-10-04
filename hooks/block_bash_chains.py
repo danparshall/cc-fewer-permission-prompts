@@ -124,16 +124,121 @@ CHAIN_RE = re.compile(r'&&|\|\||;')
 LEADING_VERB_RE = re.compile(r'^\s*([a-zA-Z][\w-]*)(?=\s|$)')
 
 
+def _end_single(cmd: str, i: int):
+    """Index of the `'` closing a single-quoted span whose body starts at i.
+    No escapes inside single quotes. None if unterminated."""
+    j = cmd.find("'", i)
+    return None if j == -1 else j
+
+
+def _end_double(cmd: str, i: int):
+    """Index of the `"` closing a double-quoted span whose body starts at i.
+    Inside double quotes: backslash escapes the next char, and $(...) /
+    `...` are nested contexts whose own quotes don't close this span."""
+    n = len(cmd)
+    while i < n:
+        c = cmd[i]
+        if c == "\\":
+            i += 2
+        elif c == '"':
+            return i
+        elif cmd.startswith("$(", i):
+            j = _end_subst(cmd, i + 2)
+            if j is None:
+                return None
+            i = j + 1
+        elif c == "`":
+            j = _end_backtick(cmd, i + 1)
+            if j is None:
+                return None
+            i = j + 1
+        else:
+            i += 1
+    return None
+
+
+def _end_backtick(cmd: str, i: int):
+    """Index of the closing backtick for a span whose body starts at i."""
+    n = len(cmd)
+    while i < n:
+        if cmd[i] == "\\":
+            i += 2
+        elif cmd[i] == "`":
+            return i
+        else:
+            i += 1
+    return None
+
+
+def _end_subst(cmd: str, i: int):
+    """Index of the `)` closing a $( whose body starts at i. Tracks paren
+    depth and skips over quoted spans, which may themselves contain parens."""
+    n = len(cmd)
+    depth = 1
+    while i < n:
+        c = cmd[i]
+        if c == "\\":
+            i += 2
+            continue
+        if c == "'":
+            j = _end_single(cmd, i + 1)
+        elif c == '"':
+            j = _end_double(cmd, i + 1)
+        elif c == "`":
+            j = _end_backtick(cmd, i + 1)
+        else:
+            if c == "(":
+                depth += 1
+            elif c == ")":
+                depth -= 1
+                if depth == 0:
+                    return i
+            i += 1
+            continue
+        if j is None:
+            return None
+        i = j + 1
+    return None
+
+
 def strip_inert(cmd: str) -> str:
-    """Replace single-quoted, double-quoted, $(...), and `...` segments
-    with empty placeholders so chain operators inside them don't match.
-    Naive: doesn't handle escaped quotes or nested substitutions, but
-    covers the common cases."""
-    cmd = re.sub(r"'[^']*'", "''", cmd)
-    cmd = re.sub(r'"[^"]*"', '""', cmd)
-    cmd = re.sub(r'\$\([^)]*\)', '$()', cmd)
-    cmd = re.sub(r'`[^`]*`', '``', cmd)
-    return cmd
+    """Blank single-quoted, double-quoted, $(...), and `...` spans (and
+    backslash-escaped characters) so chain operators inside them don't
+    match CHAIN_RE.
+
+    One left-to-right pass tracking shell quote state, so whichever quote
+    opens first owns the span: an apostrophe inside "..." is literal, a
+    double quote inside '...' is literal, \\" inside "..." doesn't close
+    it, and quotes nested in $(...) inside "..." don't close the outer
+    span. An unterminated span is left as-is rather than blanked, so an
+    unmatched quote can't hide a real chain operator after it."""
+    out = []
+    n = len(cmd)
+    i = 0
+    while i < n:
+        c = cmd[i]
+        if c == "\\" and i + 1 < n:
+            out.append("\\_")
+            i += 2
+            continue
+        if c == "'":
+            end, placeholder = _end_single(cmd, i + 1), "''"
+        elif c == '"':
+            end, placeholder = _end_double(cmd, i + 1), '""'
+        elif cmd.startswith("$(", i):
+            end, placeholder = _end_subst(cmd, i + 2), "$()"
+        elif c == "`":
+            end, placeholder = _end_backtick(cmd, i + 1), "``"
+        else:
+            out.append(c)
+            i += 1
+            continue
+        if end is None:
+            out.append(cmd[i:])
+            break
+        out.append(placeholder)
+        i = end + 1
+    return "".join(out)
 
 
 NASTYGRAM = (

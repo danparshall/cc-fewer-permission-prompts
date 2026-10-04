@@ -127,12 +127,55 @@ NASTYGRAM = (
 )
 
 
+def _strip_quotes(cmd: str, keep_double: bool) -> str:
+    """One left-to-right pass tracking shell quote state, so whichever quote
+    opens first owns the span (an apostrophe inside "..." is literal, a `"`
+    inside '...' is literal, \\" inside "..." doesn't close it).
+
+    Single-quoted spans become `''`. Double-quoted spans become `""`, or, with
+    keep_double, are kept verbatim. Backslash-escaped characters (outside
+    single quotes) become `\\_`, since they're literal. An unterminated quote
+    leaves the rest of the command as-is."""
+    out = []
+    n = len(cmd)
+    i = 0
+    while i < n:
+        c = cmd[i]
+        if c == "\\" and i + 1 < n:
+            out.append("\\_")
+            i += 2
+        elif c == "'":
+            j = cmd.find("'", i + 1)
+            if j == -1:
+                out.append(cmd[i:])
+                break
+            out.append("''")
+            i = j + 1
+        elif c == '"':
+            body = []
+            j = i + 1
+            while j < n and cmd[j] != '"':
+                if cmd[j] == "\\" and j + 1 < n:
+                    body.append("\\_")
+                    j += 2
+                else:
+                    body.append(cmd[j])
+                    j += 1
+            if j >= n:
+                out.append(cmd[i:])
+                break
+            out.append('"' + "".join(body) + '"' if keep_double else '""')
+            i = j + 1
+        else:
+            out.append(c)
+            i += 1
+    return "".join(out)
+
+
 def strip_all_quotes(cmd: str) -> str:
     """Blank single- AND double-quoted content. Used for the loop/do/pipe
     conjuncts: a loop keyword or pipe inside any quoted string is inert."""
-    cmd = re.sub(r"'[^']*'", "''", cmd)
-    cmd = re.sub(r'"[^"]*"', '""', cmd)
-    return cmd
+    return _strip_quotes(cmd, keep_double=False)
 
 
 def strip_single_quotes(cmd: str) -> str:
@@ -140,7 +183,7 @@ def strip_single_quotes(cmd: str) -> str:
     `$var` inside SINGLE quotes is literal (no expansion, no matcher bail), but
     a `$var` inside DOUBLE quotes DOES expand and DOES bail — so double-quoted
     content must be kept when scanning for variables."""
-    return re.sub(r"'[^']*'", "''", cmd)
+    return _strip_quotes(cmd, keep_double=True)
 
 
 def main() -> None:

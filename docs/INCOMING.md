@@ -21,7 +21,35 @@ Format for each entry:
 
 ## Pending
 
-### 2026-09-22 — `block_bash_chains.py` FALSE POSITIVE (DENY) on an all-`git` chain: an apostrophe in the double-quoted `-m` message corrupts `strip_inert`'s quote handling, leaking a quoted `;` into the chain split → phantom `#93` segment
+### 2026-10-04 — RECURRENCE of the 07-24 weirdo: `;` inside a quoted `git commit -m "<msg>"` body tripped `block_bash_chains.py` DENY (single command, no shell chain) — SECOND occurrence, meets Dan's frequent-AND-clean-alternative gate — **FIXED 2026-10-04 (same day)**
+
+**Resolution (2026-10-04, session `Dan (air, dotfiles, 20261004T1751, opus-5.5)`):** `strip_inert()` rewritten as one left-to-right lexer that tracks shell quote state: whichever quote opens first owns the span, `\"` inside `"…"` doesn't close it, `$(…)` nested in `"…"` (the per-commit codename template) is tracked with its own quotes, `\;` outside quotes is literal, and an unterminated quote is left unblanked so it can't hide a real chain. Tests: `test_block_bash_chains.py::TestQuoteStateTracking` (12 cases, 6 RED before the fix); full pre-commit list 965 green on Air. **Correction to the analysis below:** a lone apostrophe inside a single `git commit -m "…; …"` did NOT leak under the old code. The leak needed a `'` *after* the message's closing `"` (09-22's `--format='…'`) or a `\"` inside the message. So with the command uncaptured, the 10-04 trigger is unconfirmed. The fix covers both known leak shapes. My reconstruction of the 07-24 body also passed under the old code, so its exact trigger is likewise unconfirmed (the body was elided). `block_loop_with_pipe.py` had the same flaw in both of its strip levels and got the same fix the same session (`_strip_quotes(cmd, keep_double)`, a quote-only lexer with no `$(…)` blanking, because that hook deliberately scans command substitutions for `$var`). 4 new cases in `test_block_loop_with_pipe.py`. 3 were RED before the fix: one missed block, where an apostrophe paired with a later `'` and swallowed a whole loop, and two false blocks. None were seen in the wild; this was preventive.
+
+**Command:** exact command not captured; shape: `git commit -m "<multi-line message>"` with one or more `;` inside the double-quoted `-m` body. No shell chain — every `;` was inside the quoted argument. Workaround used: `git commit -F <file>`.
+
+**Context:** Air session `Dan (air, dotfiles, 20261004T1642, opus-5.5)`, persona-sync work-line, Phase 5, 2026-10-04. Standard `~/.claude/settings.json` (all Dan-authored hooks live). `block_bash_chains.py` hard-failed with its standard nastygram ("Bash chain with at least one segment whose leading verb isn't blanket-allowed"). Source note: `docs/historical/persona-sync/convos/20261004_persona_markers_phase5.md` line 21.
+
+**Recurrence of:** the `### 2026-07-24 — semicolons inside quoted git commit -m "<msg>" body …` entry below (~line 1492). Same shape, same hook, same workaround (`-F <file>`). Also structurally the same root-cause family as the `### 2026-09-22 — block_bash_chains.py FALSE POSITIVE … apostrophe … leaking a quoted ;` entry above: both are `strip_inert` failing to model shell quote nesting.
+
+**Segments + rules I think should match:** one segment, leading verb `git` (blanket ALLOW `Bash(git *)`, in `_blanket_verbs.py`). Zero shell chain operators at the shell level. Should run silently.
+
+**Is the separator scan quote-aware today? (read `claude-hooks/block_bash_chains.py`, hook NOT modified.)** Partially — and that partiality is the bug. The scan does attempt to neutralize quoted content before splitting, via `strip_inert()` (lines 127–136), which the chain detection (`CHAIN_RE.search(stripped)`, line 225) and the per-segment split (`CHAIN_RE.split(stripped)`, line 233) both run against. `strip_inert` blanks quoted spans with **sequential independent regex passes**: single-quote first (`re.sub(r"'[^']*'", "''", cmd)`, line 132), then double-quote (`re.sub(r'"[^"]*"', '""', cmd)`, line 133). Consequence:
+- A `;` inside a cleanly-closed double-quoted body **with no interior apostrophe** IS neutralized — the line-133 pass blanks `"[^"]*"` (and `[^"]` matches newlines, so multi-line bodies are covered). Such a command should NOT fire the hook.
+- A `;` inside a double-quoted body that ALSO contains an apostrophe/single-quote (English contraction — "won't", "last week"-style quoting, etc.) leaks, because the line-132 single-quote pass runs first and misreads the interior apostrophe as a quote delimiter, consuming the message's closing `"` and defeating the line-133 pass. This is exactly the mechanism dissected in the 2026-09-22 entry.
+
+So the hook is NOT robustly quote-nesting-aware. The 07-24 command's reconstructed body visibly contained single-quoted spans (`'last week' -> 'two days ago'`), which fits the apostrophe-corruption path. Today's 10-04 body was not captured, so I can't confirm whether it contained an apostrophe. **Honest caveat:** if the 10-04 body was pure `;`-no-apostrophe, the current `strip_inert` *should* have neutralized it and the DENY would be unexplained by this mechanism (a different bug) — but commit messages so routinely contain contractions that the apostrophe-corruption path is the overwhelmingly likely cause, and it unifies all three dated entries (07-24, 09-22, 10-04).
+
+**Hypothesis:** Hook-side false positive in `block_bash_chains.py`'s `strip_inert`, quote-nesting flaw (sequential single-then-double passes don't model shell quote state). A legitimately single all-`git` command is split into phantom segments whose "leading verbs" are message words, none blanket → `emit_block()` → DENY. Not matcher-side; the matcher does proper quote lexing and would have run this.
+
+**Impact:**
+- This is the **second dated occurrence** of the quoted-`;`-in-commit-message shape (07-24, now 10-04), plus the 09-22 apostrophe entry that shares the root cause. Per Dan's standing deny-hook gate (frequent AND clean-alternative), the **frequency conjunct is now met** (n≥2, recurring, structurally guaranteed to recur because commit messages routinely carry both apostrophes and `;`/`#NN` label punctuation) and the **clean-alternative conjunct was already met** (`git commit -F <file>`, or split Bash calls).
+- The fix direction already scoped in the 09-22 entry's Strategy-2 note: make `strip_inert` quote-context-aware (single left-to-right pass honoring whichever quote opened first — the standard shell quote-state machine), so an apostrophe inside a double-quoted span is inert and vice-versa. `block_loop_with_pipe.py` has a two-level quote-strip precedent to crib. **Not proposing/making a hook change here — curator scope is observation.** Flag to Dan that this now clears his gate.
+
+**Classification:** hook-side false positive (`block_bash_chains.py` `strip_inert` quote-nesting flaw). NOT a matcher weirdo, NOT an allow-rule gap. The command is legitimately single-segment all-blanket and should have run.
+
+---
+
+### 2026-09-22 — `block_bash_chains.py` FALSE POSITIVE (DENY) on an all-`git` chain: an apostrophe in the double-quoted `-m` message corrupts `strip_inert`'s quote handling, leaking a quoted `;` into the chain split → phantom `#93` segment — **FIXED 2026-10-04** (see the 2026-10-04 entry's Resolution; this exact command is pinned as `test_incoming_2026_09_22_exact_command`)
 
 **Command:**
 ```
@@ -1490,6 +1518,8 @@ cd /Users/dan/code/lobby_analysis/.worktrees/wi-allocation-matrix && pwd && git 
 
 
 ### 2026-07-24 — semicolons inside quoted `git commit -m "<msg>"` body tripped block_bash_chains hook DENY (single command, no chain)
+
+**Recurred 2026-10-04** (see the 2026-10-04 entry at the top of Pending) — second occurrence; with the 09-22 apostrophe entry sharing the root cause, this now meets Dan's frequent-AND-clean-alternative deny-hook gate.
 
 **Command:**
 ```

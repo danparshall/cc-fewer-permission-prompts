@@ -226,6 +226,31 @@ CASES = [
         "conjuncts (loop, `do`, lone pipe) co-present and can't scope them. "
         "Block conservatively; cost = a cheap rewrite to two Bash calls.",
     ),
+    # ---- Quote-state tracking (2026-10-04, same flaw as block_bash_chains
+    # strip_inert): whichever quote opens first owns the span. ----
+    (
+        "echo \"it's\"; for f in *.txt; do echo $f; done; echo 'end'",
+        True,
+        "apostrophe inside double quotes must not pair with a LATER single "
+        "quote and swallow the loop (missed-block case)",
+    ),
+    (
+        "for i in 1 2; do echo \"can't\"; echo '$i'; done",
+        False,
+        "apostrophe inside double quotes must not expose a single-quoted "
+        "literal `$i` as a live variable (static loop, false-block case)",
+    ),
+    (
+        'echo "a \\" for i do $x"',
+        False,
+        "escaped double quote inside double quotes doesn't close the span; "
+        "loop words are all quoted, no loop (false-block case)",
+    ),
+    (
+        "for i in 1 2; do echo \"it's $i\"; done",
+        True,
+        "pin: variable in double quotes alongside an apostrophe still fires",
+    ),
     (
         "echo hello",
         False,
