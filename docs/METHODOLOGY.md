@@ -63,7 +63,7 @@ Used when (a) Mode A is too noisy, (b) you want reproducibility, or (c) the in-s
 
 ### Dan's HITL denial convention
 
-**Anything that PROMPTS, Dan denies.** A "user rejected" tool result in the probe session therefore means **PROMPT**, not disapproval of the work itself — the probe Claude should record PROMPT and continue, not stop to re-plan. Dan will often paste the prompt UI's text (command + description + reason line, if any) back into the probe session to aid triage.
+**Anything that PROMPTS, Dan denies.** A "user rejected" tool result in the probe session therefore means **PROMPT**, not disapproval of the work itself — the probe Claude should record PROMPT and continue, not stop to re-plan. This applies to **any** session running a probe Dan has approved, including in-session Mode A tests in an ordinary working session, not only dedicated probe sessions: the generic "STOP and wait" text in the rejection result does not override it (2026-11-10: a coordinating session stopped after a rejected probe and had to be told). Dan will often paste the prompt UI's text (command + description + reason line, if any) back into the probe session to aid triage.
 
 **Paste-shape as diagnostic:** the shape of the pasted text is a signal about what kind of prompt fired.
 - *Command + description + explicit reason-line* ("Contains process_substitution", "Brace expansion", "Contains brace with quote character", "…cannot be statically analyzed") → Family-3 static-analysis bail. **Capture the reason-line verbatim** — the node names come straight from tree-sitter-bash and are the drift-sensitive signal.

@@ -85,6 +85,7 @@ BLANKET_VERBS = frozenset({
     'uv',
     'uvx',
     'vitest',
+    'vscode',
     'wc',
     'which',
     'whoami',

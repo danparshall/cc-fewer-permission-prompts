@@ -74,6 +74,23 @@ CASES = [
         False,
         "cd then non-git chain (chain hook's cd whitelist territory)",
     ),
+    # Full-path git gets the same verdict as bare git: settings.json allows
+    # /usr/bin/git wherever it allows git, so this tripwire must see it too.
+    (
+        f"{CD} /Users/dan/code/foo{AND}/usr/bin/{GIT} status",
+        True,
+        "cd then full-path /usr/bin/git",
+    ),
+    (
+        f"/usr/bin/{CD} /tmp{AND}{GIT} status",
+        True,
+        "full-path cd then git",
+    ),
+    (
+        f"{CD} /tmp{AND}/opt/homebrew/bin/{GIT} status",
+        False,
+        "non-system git path is out of scope (not given bare-git verdicts)",
+    ),
 ]
 
 

@@ -18,11 +18,16 @@ import sys
 # `cd ... | git ...` is structurally different and rarer.
 CHAIN_SPLIT_RE = re.compile(r'\s*(?:&&|\|\||;)\s*')
 
+# Optional system bin dir before a program name (/bin, /usr/bin, /sbin,
+# /usr/sbin). settings.json gives `/usr/bin/git` the same verdicts as bare
+# `git` (update_claude_permissions.SYSTEM_BIN_DIRS), so this hook must too.
+SYSTEM_DIR = r'(?:(?:/usr)?/s?bin/)?'
+
 # A segment that STARTS with `cd <path>` (path can be quoted or unquoted).
-CD_SEGMENT_RE = re.compile(r'^\s*cd\s+(?:"[^"]*"|\'[^\']*\'|\S+)')
+CD_SEGMENT_RE = re.compile(rf'^\s*{SYSTEM_DIR}cd\s+(?:"[^"]*"|\'[^\']*\'|\S+)')
 
 # A segment that STARTS with `git <subcmd>`.
-GIT_SEGMENT_RE = re.compile(r'^\s*git\b')
+GIT_SEGMENT_RE = re.compile(rf'^\s*{SYSTEM_DIR}git\b')
 
 
 def has_cd_then_git(command: str) -> bool:

@@ -12,6 +12,57 @@ Each entry should include:
 
 ---
 
+## 2026-11-11 — Unlisted `VAR=val` prefix prompts; `env VAR=val cmd` runs silently — and also slips past deny rules. Recorded, not fixed.
+
+**Status:** Weirdo from a live session (verification repo), triaged in a dotfiles session with two probes. **No change made** — Dan's call, 2026-11-11: noted only, returning to auto mode for now (auto mode's classifier preempts these prompts; FINDINGS 2026-09-02).
+
+**Methodology:** Mode A in an ordinary working session (permission mode `manual`), Opus 5.5, Air. Deny-everything convention.
+
+**Original prompt (verbatim command, from Dan's paste):** `TARGETED_OUT=/Users/dan/data/verification/targeted_pass6 TARGETED_PROBLEMS=… TARGETED_SPLIT=… PYTHONPATH=analysis uv run python docs/active/university-pilot/results/scripts/pass7_pick_problems.py` → "This command requires approval" (plain allow-rule miss). Same mechanism as INCOMING 2026-08-16 (`CLAUDE_CODE_AUTO_COMPACT_WINDOW=` prefix): the matcher anchors on the leading assignment, not the verb, so `Bash(uv *)` never applies. The ~10 env-prefix allow rules (`PYTHONPATH=*`, `NODE_ENV=*`, `UV_=*`, …) don't cover `TARGETED_*`, and `PYTHONPATH=` isn't first.
+
+**Results:**
+
+| # | Command | Result |
+|---|---|---|
+| P1 | `env PROBE_ENVPREFIX=1 OTHER_PROBE=2 printenv PROBE_ENVPREFIX` | ALLOW (silent; printed `1`) |
+| P2 | `env PROBE_ENVPREFIX=1 git -C ~/code/dotfiles clean -n` | **ALLOW** — ran despite the `git clean` DENY rule (dry run; nothing deleted) |
+
+**Interpretation:** Deny rules also match on the leading word, so `Bash(env *)` lets any denied command through behind an `env` wrapper. Inferred, not tested: the same holds for the env-prefix allow rules (`Bash(PATH=*)` etc.) and for other DENY entries; hooks that key on the leading verb (`use_uv_run_python.py`, `block_absolute_path_py_verb.py`) would also see `env` and pass. Hooks that parse the full command may or may not catch it — unchecked.
+
+**Threat-model verdict (Dan, 2026-11-11):** low priority. The deny list and hooks exist to catch bad habits and pull Dan into the loop on weird behavior, not to stop deliberate evasion; agents don't habitually env-wrap `git` or `rm`. Known gap, no hook, no plan. Revisit only if an agent is seen working around a deny this way.
+
+**Considered, not done — habit-line change:** replace the CLAUDE-PERMISSIONS shell-state advice "inline env vars (`VAR=val command`)" — which itself produces these prompts for any unlisted name — with "use `env VAR=val command`". Side effects: (1) `env` execs a binary, so it can't run aliases or shell functions (`env X=1 vscode` fails); (2) verb-keyed hooks see `env`, so e.g. `env X=1 python3 foo.py` would skip the uv nudge unless those hooks learn to skip a leading `env VAR=…`; (3) same mechanism as the deny gap above. Rejected alternative: per-name `Bash(TARGETED_*)` rules — unbounded, and each allows anything after the prefix.
+
+**Confidence:** High for P1/P2 (direct observation). Medium for the inferred extensions (other deny entries, env-prefix allow rules, hook behavior).
+
+---
+
+## 2026-11-10 — `~/.claude/` paths in Bash prompt as "sensitive file" despite allow rules; `cp` treats its SOURCE as a write target; symlink not required
+
+**Status:** Weirdo from a live session (autograntor-replication running `init-research-repo`), triaged in a dotfiles session and tested with two probes. Fixed by rewording the two init skills to use Read + Write instead of `cp`, and adding a habits bullet to the permissions block. No hook added.
+
+**Methodology:** Mode A in an ordinary working session (permission mode `manual`, per the claude-exit parent-process line), Opus 5.5, Air. Deny-everything convention. Destination for both probes: the session scratchpad.
+
+**Original prompt (verbatim, from Dan's paste):** `cp /Users/dan/.claude/skills/init-research-repo/templates/history_seed.md.tmpl /Users/dan/code/autograntor-replication/HISTORY.md` → "Claude requested permissions to edit /Users/dan/code/dotfiles/nori-researcher/skills/init-research-repo/templates/history_seed.md.tmpl which is a sensitive file. /Users/dan/.claude/skills/init-research-repo/templates/history_seed.md.tmpl resolves through a symlink to …". Option 2 offered "always allow access to /Users/dan/.claude/skills/init-research-repo/templates from this project".
+
+**Relevant allow state (user `settings.json`):** `Bash(cp *)`, `Read(~/.claude/**)`, `Read(~/code/**)`, `Edit(~/.claude/**)`, `Edit(~/code/**)`; `/Users/dan/.claude/skills` in `additionalDirectories`. Every rule that should apply is present.
+
+**Results:**
+
+| # | Source path as written | Symlink? | Result | Prompt text |
+|---|---|---|---|---|
+| orig | `~/.claude/skills/init-research-repo/templates/history_seed.md.tmpl` | yes → dotfiles | PROMPT | "…edit … which is a sensitive file …" (names the resolved path) |
+| P1 | `~/.claude/settings.json` | no | PROMPT | "Claude requested permissions to write to /Users/dan/.claude/settings.json" |
+| P2 | `~/code/dotfiles/nori-researcher/skills/init-research-repo/templates/history_seed.md.tmpl` | no | ALLOW | — |
+
+**Interpretation:** A `~/.claude/` path anywhere in a Bash command triggers a built-in protected-path check that outranks the allow rules. The symlink is not the trigger (P1 has none); it only changes which path the prompt names. The check treats `cp`'s *source* as a write/edit target: both prompts name the file `cp` only reads. Not tested: whether a read-only verb (`cat`, `ls`) on a `~/.claude/` path also prompts. Read-tool access to `~/.claude/skills/` is prompt-free in daily use.
+
+**Impact:** No hook (the clean alternative, Read + Write, is a skill-wording change, not a command-shape rule). `init-research-repo` and `init-paper-collection` SKILL.md now say Read the template, Write the target, never `cp`; the `$T` shell-variable shorthand that invited `cp` is gone. Habits bullet added to the CLAUDE-PERMISSIONS block. "Always allow … from this project" is a poor answer: init skills run in a fresh repo each time.
+
+**Confidence:** High that `~/.claude/` paths prompt regardless of allow rules and symlinks (two independent paths). Medium on the mechanism ("source treated as write") — inferred from the prompt wording, which is consistent across two prompts.
+
+---
+
 ## 2026-09-02 — #79 re-probe on CC 2.1.258: NO static-matcher drift (8/8 default mode, reason-text verbatim); NEW auto-mode classifier layer preempts ALL prompt families when active
 
 **Status:** Scheduled re-probe (dotfiles #79; corpus last verified on CC 2.1.220). Two-condition result: in **auto mode**, every expected-PROMPT row ran silently (6/6 deviations, plus harness row A3); after switching the probe session to **default mode** (shift+tab), all 8 min-viable rows matched the June-era model exactly, including verbatim reason-text. `MATCHER_LAST_VERIFIED` bumped to 2026-09-02. Every shipped hook retains its empirical justification **in default permission mode**; in auto mode the hooks are strictly additive friction (see Impact).
