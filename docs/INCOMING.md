@@ -1493,6 +1493,16 @@ cp /tmp/perm_probe/.claude/settings.json /Users/dan/code/dotfiles/docs/active/ch
 
 (Move entries here once their lesson is captured in `FINDINGS.md`. Keep the original text for audit trail. Resolution note added at top of entry.)
 
+### 2026-11-24 — `curl -sL -o <scratchpad>/offchip.pdf --create-dirs -w "%{…}" "<google-docs export url>"` prompted — RESOLVED same day via Strategy-2 hook `block_curl_silent.py`
+
+**Resolution:** Plain allow-rule miss, not a matcher heuristic. `Bash(curl -L -o *.pdf *)` needs the literal prefix `curl -L -o`; the bundled `-sL` breaks it. (The `}"` in the `-w` string may also trip the brace-quote heuristic; not tested, and moot once the canonical form is used.) Dan's ruling: "the problem is the -s command; -oL should be fine, but we don't WANT silent failures!" and "usually it's fine with an automatic DENY, since the agent then gets the reminder". Shipped `claude-hooks/block_curl_silent.py`: denies `-s`/`--silent` in any curl invocation (bundles included; shlex-based, so `-A "… -s"` and quoted text don't fire), nastygram names `curl -fL -o <dest> "<url>"`. Added allow rules `Bash(curl -fL -o *.pdf *)` and `Bash(curl -fL -o * https://arxiv.org/*)`. STRATEGIES item #8.
+
+**Frequency evidence (transcript survey, all `~/.claude/projects/*/*.jsonl`, fnmatch approximation of the allow rules):** curl calls missing the allow rules per month: Aug 133/163, Sep 150/152, Oct 178/203, Nov 208/221 (to the 24th). Misses by model: Opus 5.5 380, Opus 4.7 142, Fable 5.x 147. Most common flags among misses: `-s` family (`-s` 293, `-sL` 261, `-sS` 52, `-sSL` 39), `-w` 263, `-A` 138. Sep–Nov misses by kind: non-PDF download 307 (158 with no extension, mostly `-o /dev/null -w "%{http_code}"` link checks), stdout piped to grep 113, PDF download 82, other 34.
+
+**Expected effect, stated plainly:** the hook ends the `-s` habit and makes PDF retries silent. It does **not** remove most curl prompts: non-PDF downloads, `-A`, `-w`, and piped reads still prompt after the agent drops `-s`, because no allow rule covers them. Dan accepted that (the deny + reminder is the point). Revisit if the non-PDF prompts become the new complaint; Strategy 1 there is a security call (`Bash(curl -L -o * *)`'s trailing `*` also admits `-T`/`-d @file`).
+
+**Not yet done:** fresh-session end-to-end check (hook fires on a live `curl -s`, nastygram appears in the tool result). Installed + registered on the Air 2026-11-24; Pro and tarragon need `install.sh`.
+
 ### 2026-05-30 — Multi-segment `cd ... && pwd && git status && git log` — RESOLVED via Allow rule
 
 **Resolution (2026-05-30):** Strategy 1 (add Allow rule). Added `Bash(cd /Users/dan/code/*)` (slash variant) to `update_claude_permissions.py` `ALLOW_RULES`, adjacent to the existing `Bash(cd /Users/dan/code *)` (space variant). Tests pass (68/68). Applied to live settings via `install.sh`. Lesson captured in `FINDINGS.md`'s 2026-05-30 side findings. The secondary `pwd` bare-arg-less suspicion is unresolved — left in `probes/TEST_PLAN.md` test #10 for next probe session.
